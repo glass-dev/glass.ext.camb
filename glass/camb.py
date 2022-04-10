@@ -2,7 +2,7 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2022.3.11'
+__version__ = '2022.4.10'
 
 
 import logging
@@ -26,6 +26,7 @@ def camb_matter_cl(pars, lmax, *, ncorr=1, evolve=True, limber=False, limber_lmi
 
     # need dipole
     pars.min_l = 1
+    pars.max_l = lmax
 
     # set up parameters to only compute the intrinsic matter cls
     pars.Want_CMB = False
