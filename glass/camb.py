@@ -2,7 +2,7 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2022.6.7'
+__version__ = '2022.8.10'
 
 
 import logging
@@ -13,30 +13,33 @@ import camb
 
 from glass.core import generator
 
-
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @generator('zmin, zmax -> cl')
-def camb_matter_cl(pars, lmax, *, ncorr=1, evolve=True, limber=False, limber_lmin=100):
+def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
+                   limber=False, limber_lmin=100):
     '''generate the matter angular power spectrum using CAMB'''
 
     # make a copy of input parameters so we can set the things we need
     pars = pars.copy()
 
-    # need dipole
-    pars.min_l = 1
-
-    # set internal options for this lmax
-    pars.set_for_lmax(lmax, lens_potential_accuracy=0)
-
-    # set up parameters to only compute the intrinsic matter cls
+    # set up parameters for angular power spectra
+    if nonlinear:
+        pars.NonLinear = camb.model.NonLinear_both
+    else:
+        pars.NonLinear = camb.model.NonLinear_none
     pars.Want_CMB = False
     pars.Want_Cls = True
+    pars.min_l = 1
+    pars.max_l = lmax + 1
+    pars.max_eta_k = lmax*k_eta_fac
+
+    # set up parameters to only compute the intrinsic matter cls
     pars.SourceTerms.limber_window = limber
     pars.SourceTerms.limber_phi_lmin = limber_lmin
     pars.SourceTerms.counts_density = True
-    pars.SourceTerms.counts_evolve = evolve
+    pars.SourceTerms.counts_evolve = True
     pars.SourceTerms.counts_redshift = False
     pars.SourceTerms.counts_lensing = False
     pars.SourceTerms.counts_velocity = False
@@ -45,12 +48,14 @@ def camb_matter_cl(pars, lmax, *, ncorr=1, evolve=True, limber=False, limber_lmi
     pars.SourceTerms.counts_ISW = False
     pars.SourceTerms.counts_potential = False
 
-    log.info('will compute angular power spectra up to lmax=%d', lmax)
-    log.info('will evolve source windows: %s', evolve)
-    log.info('computing initial background results')
+    logger.info('compute angular power spectra up to lmax=%d', lmax)
+    logger.info('correlating %d matter shells', ncorr)
+    logger.info('nonlinear power spectrum: %s', nonlinear)
+    logger.info('Limber\'s approximation above l=%d: %s', limber_lmin, limber)
+    logger.info('computing initial background results')
 
     # compute the initial power spectra etc.
-    results = camb.get_background(pars, no_thermo=True)
+    bg = camb.get_background(pars, no_thermo=True)
 
     # keep a stack of ncorr previous source windows for correlation
     windows = deque()
@@ -67,7 +72,7 @@ def camb_matter_cl(pars, lmax, *, ncorr=1, evolve=True, limber=False, limber_lmi
 
         # create a new source window for redshift interval
         z = np.linspace(zmin, zmax, 100)
-        w = ((1 + z)*results.angular_diameter_distance(z))**2/results.h_of_z(z)
+        w = ((1 + z)*bg.angular_diameter_distance(z))**2/bg.h_of_z(z)
         w /= np.trapz(w, z)
         s = camb.sources.SplinedSourceWindow(source_type='counts', z=z, W=w)
 
