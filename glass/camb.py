@@ -2,7 +2,7 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2022.8.10'
+__version__ = '2022.8.11'
 
 
 import logging
@@ -29,6 +29,7 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
         pars.NonLinear = camb.model.NonLinear_both
     else:
         pars.NonLinear = camb.model.NonLinear_none
+    pars.WantTransfer = False
     pars.Want_CMB = False
     pars.Want_Cls = True
     pars.min_l = 1
@@ -36,10 +37,10 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
     pars.max_eta_k = lmax*k_eta_fac
 
     # set up parameters to only compute the intrinsic matter cls
-    pars.SourceTerms.limber_window = limber
+    pars.SourceTerms.limber_windows = limber
     pars.SourceTerms.limber_phi_lmin = limber_lmin
     pars.SourceTerms.counts_density = True
-    pars.SourceTerms.counts_evolve = True
+    pars.SourceTerms.counts_evolve = False
     pars.SourceTerms.counts_redshift = False
     pars.SourceTerms.counts_lensing = False
     pars.SourceTerms.counts_velocity = False
@@ -57,8 +58,8 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
     # compute the initial power spectra etc.
     bg = camb.get_background(pars, no_thermo=True)
 
-    # keep a stack of ncorr previous source windows for correlation
-    windows = deque()
+    # keep a stack of ncorr previous shells for correlation
+    shells = deque([], ncorr+1)
 
     # initial yield
     cl = None
@@ -70,22 +71,19 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
         except GeneratorExit:
             break
 
-        # create a new source window for redshift interval
+        # create a new source window for shell
         z = np.linspace(zmin, zmax, 100)
         w = ((1 + z)*bg.angular_diameter_distance(z))**2/bg.h_of_z(z)
         w /= np.trapz(w, z)
         s = camb.sources.SplinedSourceWindow(source_type='counts', z=z, W=w)
 
-        # keep only ncorr previous source windows on the stack
-        # then add the new one to the front of the stack
-        if len(windows) > ncorr:
-            windows.pop()
-        windows.appendleft(s)
+        # add the new shell to the front of the stack
+        shells.appendleft(s)
 
-        # pass a copy of the list of windows to CAMB
-        pars.SourceWindows = list(windows)
+        # pass the stack of shells to CAMB
+        pars.SourceWindows = shells
 
-        # compute the cls from the updated source windows
+        # compute the cls from the updated shells
         results = camb.get_results(pars)
         all_cls = results.get_source_cls_dict(lmax=lmax, raw_cl=True)
 
