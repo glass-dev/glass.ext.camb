@@ -2,7 +2,7 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2022.8.11'
+__version__ = '2022.8.25'
 
 
 import logging
@@ -16,7 +16,7 @@ from glass.core import generator
 logger = logging.getLogger(__name__)
 
 
-@generator('zmin, zmax -> cl')
+@generator('wz -> cl')
 def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
                    limber=False, limber_lmin=100):
     '''generate the matter angular power spectrum using CAMB'''
@@ -55,9 +55,6 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
     logger.info('Limber\'s approximation above l=%d: %s', limber_lmin, limber)
     logger.info('computing initial background results')
 
-    # compute the initial power spectra etc.
-    bg = camb.get_background(pars, no_thermo=True)
-
     # keep a stack of ncorr previous shells for correlation
     shells = deque([], ncorr+1)
 
@@ -67,14 +64,14 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
     # yield computed cls and get a new redshift interval, or stop on exit
     while True:
         try:
-            zmin, zmax = yield cl
+            z, w = yield cl
         except GeneratorExit:
             break
 
+        # normalise matter weight
+        w = w/np.trapz(w, z)
+
         # create a new source window for shell
-        z = np.linspace(zmin, zmax, 100)
-        w = ((1 + z)*bg.angular_diameter_distance(z))**2/bg.h_of_z(z)
-        w /= np.trapz(w, z)
         s = camb.sources.SplinedSourceWindow(source_type='counts', z=z, W=w)
 
         # add the new shell to the front of the stack
