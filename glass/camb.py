@@ -2,7 +2,7 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2022.8.25'
+__version__ = '2022.9.30'
 
 
 import logging
@@ -11,12 +11,13 @@ import numpy as np
 
 import camb
 
-from glass.core import generator
+from glass.generator import receives, yields
 
 logger = logging.getLogger(__name__)
 
 
-@generator('wz -> cl')
+@receives('wz')
+@yields('cl')
 def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
                    limber=False, limber_lmin=100):
     '''generate the matter angular power spectrum using CAMB'''
