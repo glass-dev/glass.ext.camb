@@ -11,13 +11,14 @@ import numpy as np
 
 import camb
 
-from glass.generator import receives, yields
+from glass.generator import generator
+
+from glass.matter import WZ, CL
 
 logger = logging.getLogger(__name__)
 
 
-@receives('wz')
-@yields('cl')
+@generator(receives=WZ, yields=CL)
 def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
                    limber=False, limber_lmin=100):
     '''generate the matter angular power spectrum using CAMB'''
