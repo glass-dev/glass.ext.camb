@@ -2,7 +2,7 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2022.9.30'
+__version__ = '2022.10.11'
 
 
 import logging
@@ -12,37 +12,28 @@ import numpy as np
 import camb
 
 from glass.generator import generator
-
 from glass.matter import WZ, CL
 
 logger = logging.getLogger(__name__)
 
 
 @generator(receives=WZ, yields=CL)
-def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
-                   limber=False, limber_lmin=100):
+def camb_matter_cl(pars, lmax, ncorr=1, *, limber=False, limber_lmin=100):
     '''generate the matter angular power spectrum using CAMB'''
 
     # make a copy of input parameters so we can set the things we need
     pars = pars.copy()
 
     # set up parameters for angular power spectra
-    if nonlinear:
-        pars.NonLinear = camb.model.NonLinear_both
-    else:
-        pars.NonLinear = camb.model.NonLinear_none
-    pars.WantTransfer = False
     pars.Want_CMB = False
     pars.Want_Cls = True
     pars.min_l = 1
-    pars.max_l = lmax + 1
-    pars.max_eta_k = lmax*k_eta_fac
+    pars.set_for_lmax(lmax)
 
     # set up parameters to only compute the intrinsic matter cls
     pars.SourceTerms.limber_windows = limber
     pars.SourceTerms.limber_phi_lmin = limber_lmin
     pars.SourceTerms.counts_density = True
-    pars.SourceTerms.counts_evolve = False
     pars.SourceTerms.counts_redshift = False
     pars.SourceTerms.counts_lensing = False
     pars.SourceTerms.counts_velocity = False
@@ -50,12 +41,14 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
     pars.SourceTerms.counts_timedelay = False
     pars.SourceTerms.counts_ISW = False
     pars.SourceTerms.counts_potential = False
+    pars.SourceTerms.counts_evolve = False
 
-    logger.info('compute angular power spectra up to lmax=%d', lmax)
+    logger.info('computing angular power spectra up to lmax=%d', lmax)
     logger.info('correlating %d matter shells', ncorr)
-    logger.info('nonlinear power spectrum: %s', nonlinear)
-    logger.info('Limber\'s approximation above l=%d: %s', limber_lmin, limber)
-    logger.info('computing initial background results')
+    if limber:
+        logger.info('using Limber\'s approximation for l >= %d', limber_lmin)
+    else:
+        logger.info('not using Limber\'s approximation')
 
     # keep a stack of ncorr previous shells for correlation
     shells = deque([], ncorr+1)
@@ -63,15 +56,9 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
     # initial yield
     cl = None
 
-    # yield computed cls and get a new redshift interval, or stop on exit
     while True:
-        try:
-            z, w = yield cl
-        except GeneratorExit:
-            break
-
-        # normalise matter weight
-        w = w/np.trapz(w, z)
+        # yield computed cls and get a new redshift interval
+        z, w = yield cl
 
         # create a new source window for shell
         s = camb.sources.SplinedSourceWindow(source_type='counts', z=z, W=w)
@@ -84,7 +71,7 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, k_eta_fac=2.5, nonlinear=True,
 
         # compute the cls from the updated shells
         results = camb.get_results(pars)
-        all_cls = results.get_source_cls_dict(lmax=lmax, raw_cl=True)
+        cls = results.get_source_cls_dict(lmax=lmax, raw_cl=True)
 
         # yield the cls for current window and all past ones, in order
-        cl = [all_cls.get(f'W1xW{i+1}', None) for i in range(ncorr+1)]
+        cl = [cls.get(f'W1xW{i+1}', None) for i in range(ncorr+1)]
