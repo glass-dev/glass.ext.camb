@@ -2,7 +2,7 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2022.10.11'
+__version__ = '2022.10.21'
 
 
 import logging
@@ -75,3 +75,7 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, limber=False, limber_lmin=100):
 
         # yield the cls for current window and all past ones, in order
         cl = [cls.get(f'W1xW{i+1}', None) for i in range(ncorr+1)]
+
+        # raise an alarm if any of the auto-Cl are negative
+        if np.any(cl[0] < 0):
+            logger.error('ERROR: negative auto-cls, check accuracy settings')
