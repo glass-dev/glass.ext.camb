@@ -2,31 +2,28 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2022.10.21'
+__version__ = '2022.11.30'
 
 
 import logging
-from collections import deque
 import numpy as np
-
 import camb
 
-from glass.generator import generator
-from glass.matter import WZ, CL
+from glass.util import restrict_interval
 
 logger = logging.getLogger(__name__)
 
 
-@generator(receives=WZ, yields=CL)
-def camb_matter_cl(pars, lmax, ncorr=1, *, limber=False, limber_lmin=100):
-    '''generate the matter angular power spectrum using CAMB'''
+def matter_cls(pars, lmax, weights, *, limber=False, limber_lmin=100):
+    '''Compute angular matter power spectra using CAMB.'''
 
     # make a copy of input parameters so we can set the things we need
     pars = pars.copy()
 
     # set up parameters for angular power spectra
+    pars.WantTransfer = False
+    pars.WantCls = True
     pars.Want_CMB = False
-    pars.Want_Cls = True
     pars.min_l = 1
     pars.set_for_lmax(lmax)
 
@@ -43,39 +40,17 @@ def camb_matter_cl(pars, lmax, ncorr=1, *, limber=False, limber_lmin=100):
     pars.SourceTerms.counts_potential = False
     pars.SourceTerms.counts_evolve = False
 
-    logger.info('computing angular power spectra up to lmax=%d', lmax)
-    logger.info('correlating %d matter shells', ncorr)
-    if limber:
-        logger.info('using Limber\'s approximation for l >= %d', limber_lmin)
-    else:
-        logger.info('not using Limber\'s approximation')
+    sources = []
+    for z, w in zip(weights.z, weights.w):
+        s = camb.sources.SplinedSourceWindow(z=z, W=w)
+        sources.append(s)
+    pars.SourceWindows = sources
 
-    # keep a stack of ncorr previous shells for correlation
-    shells = deque([], ncorr+1)
+    n = len(sources)
+    cls = camb.get_results(pars).get_source_cls_dict(lmax=lmax, raw_cl=True)
 
-    # initial yield
-    cl = None
+    for i in range(1, n+1):
+        if np.any(cls[f'W{i}xW{i}'] < 0):
+            logger.error('ERROR: negative auto-correlation in shell %d; increase accuracy?', i)
 
-    while True:
-        # yield computed cls and get a new redshift interval
-        z, w = yield cl
-
-        # create a new source window for shell
-        s = camb.sources.SplinedSourceWindow(source_type='counts', z=z, W=w)
-
-        # add the new shell to the front of the stack
-        shells.appendleft(s)
-
-        # pass the stack of shells to CAMB
-        pars.SourceWindows = shells
-
-        # compute the cls from the updated shells
-        results = camb.get_results(pars)
-        cls = results.get_source_cls_dict(lmax=lmax, raw_cl=True)
-
-        # yield the cls for current window and all past ones, in order
-        cl = [cls.get(f'W1xW{i+1}', None) for i in range(ncorr+1)]
-
-        # raise an alarm if any of the auto-Cl are negative
-        if np.any(cl[0] < 0):
-            logger.error('ERROR: negative auto-cls, check accuracy settings')
+    return [cls[f'W{i}xW{j}'] for i in range(1, n+1) for j in range(i, 0, -1)]
