@@ -2,16 +2,13 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2022.11.30'
+__version__ = '2023.1'
 
-
-import logging
+import warnings
 import numpy as np
 import camb
 
-from glass.util import restrict_interval
-
-logger = logging.getLogger(__name__)
+from glass.math import restrict_interval
 
 
 def matter_cls(pars, lmax, weights, *, limber=False, limber_lmin=100):
@@ -51,6 +48,6 @@ def matter_cls(pars, lmax, weights, *, limber=False, limber_lmin=100):
 
     for i in range(1, n+1):
         if np.any(cls[f'W{i}xW{i}'] < 0):
-            logger.error('ERROR: negative auto-correlation in shell %d; increase accuracy?', i)
+            warnings.warn('negative auto-correlation in shell {i}; improve accuracy?')
 
     return [cls[f'W{i}xW{j}'] for i in range(1, n+1) for j in range(i, 0, -1)]
