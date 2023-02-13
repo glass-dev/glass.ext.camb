@@ -2,16 +2,24 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2023.1'
+__version__ = '2023.2dev'
 
 import warnings
 import numpy as np
 import camb
 
-from glass.math import restrict_interval
+
+def camb_tophat_wfunc(z):
+    '''Weight function for tophat window functions and CAMB.
+
+    This weight function linearly ramps up the redshift at low values,
+    from :math:`w(z = 0) = 0` to :math:`w(z = 0.1) = 1`.
+
+    '''
+    return np.clip(z/0.1, None, 1.)
 
 
-def matter_cls(pars, lmax, weights, *, limber=False, limber_lmin=100):
+def matter_cls(pars, lmax, zs, ws, *, limber=False, limber_lmin=100):
     '''Compute angular matter power spectra using CAMB.'''
 
     # make a copy of input parameters so we can set the things we need
@@ -38,7 +46,7 @@ def matter_cls(pars, lmax, weights, *, limber=False, limber_lmin=100):
     pars.SourceTerms.counts_evolve = False
 
     sources = []
-    for z, w in zip(weights.z, weights.w):
+    for z, w in zip(zs, ws):
         s = camb.sources.SplinedSourceWindow(z=z, W=w)
         sources.append(s)
     pars.SourceWindows = sources
