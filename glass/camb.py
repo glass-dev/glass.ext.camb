@@ -9,7 +9,7 @@ import numpy as np
 import camb
 
 
-def camb_tophat_wfunc(z):
+def camb_tophat_weight(z):
     '''Weight function for tophat window functions and CAMB.
 
     This weight function linearly ramps up the redshift at low values,
@@ -19,7 +19,7 @@ def camb_tophat_wfunc(z):
     return np.clip(z/0.1, None, 1.)
 
 
-def matter_cls(pars, lmax, zs, ws, *, limber=False, limber_lmin=100):
+def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100):
     '''Compute angular matter power spectra using CAMB.'''
 
     # make a copy of input parameters so we can set the things we need
@@ -46,8 +46,8 @@ def matter_cls(pars, lmax, zs, ws, *, limber=False, limber_lmin=100):
     pars.SourceTerms.counts_evolve = False
 
     sources = []
-    for z, w in zip(zs, ws):
-        s = camb.sources.SplinedSourceWindow(z=z, W=w)
+    for za, wa, _ in ws:
+        s = camb.sources.SplinedSourceWindow(z=za, W=wa)
         sources.append(s)
     pars.SourceWindows = sources
 
