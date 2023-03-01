@@ -2,7 +2,7 @@
 # license: MIT
 '''GLASS module for CAMB interoperability'''
 
-__version__ = '2023.2dev'
+__version__ = '2023.2'
 
 import warnings
 import numpy as np
