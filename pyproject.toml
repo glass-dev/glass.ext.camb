@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "glass.ext.camb"
+description = "GLASS extension for CAMB"
+readme = "README.md"
+requires-python = ">=3.6"
+license = { file = "LICENSE" }
+maintainers = [
+    { name = "Nicolas Tessore", email = "n.tessore@ucl.ac.uk" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "camb>=1.3.5",
+    "glass>=2023.6.dev0",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+
+[project.urls]
+Homepage = "https://github.com/glass-dev/glass.ext.camb"
+Issues = "https://github.com/glass-dev/glass.ext.camb/issues"
+
+[tool.hatch.version]
+source = "vcs"
