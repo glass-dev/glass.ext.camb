@@ -34,3 +34,9 @@ Issues = "https://github.com/glass-dev/glass.ext.camb/issues"
 
 [tool.hatch.version]
 source = "vcs"
+
+[tool.hatch.build.targets.sdist]
+strict-naming = false
+
+[tool.hatch.build.targets.wheel]
+strict-naming = false
