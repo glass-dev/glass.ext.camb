@@ -57,3 +57,58 @@ def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100):
             warnings.warn('negative auto-correlation in shell {i}; improve accuracy?')
 
     return [cls[f'W{i}xW{j}'] for i in range(1, n+1) for j in range(i, 0, -1)]
+
+
+def camb_cosmo_from_config(config):
+    """Load a CAMB cosmology from a GLASS configuration."""
+
+    from cosmology import Cosmology
+
+    if config.getbool("cosmo.nonlinear", True):
+        nonlinear = camb.model.NonLinear_both
+    else:
+        nonlinear = camb.model.NonLinear_none
+
+    pars = camb.set_params(NonLinear=nonlinear)
+    cosmology = {}
+
+    try:
+        h = config.getfloat("cosmo.h")
+    except KeyError:
+        h = pars.H0/100
+    else:
+        cosmology["H0"] = 100*h
+
+    try:
+        Oc = config.getfloat("cosmo.Oc")
+    except KeyError:
+        pass
+    else:
+        cosmology["omch2"] = Oc*h**2
+
+    try:
+        Ob = config.getfloat("cosmo.Ob")
+    except KeyError:
+        pass
+    else:
+        cosmology["ombh2"] = Ob*h**2
+
+    pars.set_cosmology(**cosmology)
+
+    return Cosmology.from_camb(pars)
+
+
+def camb_tophat_weight_from_config(config, cosmo):
+    """Load a CAMB tophat weight from a GLASS configuration."""
+    return camb_tophat_weight
+
+
+def camb_cls_from_config(config, shells, cosmo):
+    """Compute CAMB angular matter power spectra from a GLASS configuration."""
+    if cosmo.__class__.__name__ != "CambCosmology":
+        raise TypeError("CAMB spectra require CAMB cosmology")
+    # boost the accuracy to get consistent lensing and galaxies
+    pars = cosmo._p.copy()
+    pars.Accuracy.TimeStepBoost = 5
+    lmax = config.getint("fields.lmax")
+    return matter_cls(pars, lmax, shells)

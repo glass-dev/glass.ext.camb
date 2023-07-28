@@ -32,6 +32,15 @@ test = [
 Homepage = "https://github.com/glass-dev/glass.ext.camb"
 Issues = "https://github.com/glass-dev/glass.ext.camb/issues"
 
+[project.entry-points."glass.cosmo"]
+camb = "glass.ext.camb:camb_cosmo_from_config"
+
+[project.entry-points."glass.shells.weight"]
+camb_tophat = "glass.ext.camb:camb_tophat_weight_from_config"
+
+[project.entry-points."glass.fields.cls"]
+camb = "glass.ext.camb:camb_cls_from_config"
+
 [tool.hatch.version]
 source = "vcs"
 
