@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "glass.ext.camb"
 description = "GLASS extension for CAMB"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 maintainers = [
     { name = "Nicolas Tessore", email = "n.tessore@ucl.ac.uk" },
@@ -20,12 +20,14 @@ dependencies = [
     "numpy",
     "camb>=1.3.5",
     "glass>=2023.7",
+    "cosmology.compat.camb",
 ]
 dynamic = ["version"]
 
 [project.optional-dependencies]
 test = [
     "pytest",
+    "cosmology.compat.camb",
 ]
 
 [project.urls]
