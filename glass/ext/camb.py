@@ -54,6 +54,6 @@ def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100):
 
     for i in range(1, n+1):
         if np.any(cls[f'W{i}xW{i}'] < 0):
-            warnings.warn('negative auto-correlation in shell {i}; improve accuracy?')
+            warnings.warn(f'negative auto-correlation in shell {i}; improve accuracy?')
 
     return [cls[f'W{i}xW{j}'] for i in range(1, n+1) for j in range(i, 0, -1)]
