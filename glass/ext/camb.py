@@ -21,15 +21,18 @@ def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100,
                cdm_only=False):
     '''Compute angular matter power spectra using CAMB.
 
-    CAMB's number counts source traces cold dark matter.  By default, the
-    spectra are converted to total matter, with each pair rescaled by
-    :math:`\\sqrt{R_i R_j}`, where :math:`R_i` is the ratio of total matter to
-    cold dark matter power at the effective redshift of shell :math:`i` and
-    the Limber wavenumber.  Set ``cdm_only=True`` to skip the conversion.
+    CAMB's number counts source traces cold dark matter.  By default, each
+    window is given the scale-dependent bias :math:`b(k, z) = \\sqrt{P_{\\rm
+    tot}(k, z)/P_{\\rm cdm}(k, z)}`, which turns the source into total matter
+    mode by mode.  Set ``cdm_only=True`` to compute the cold dark matter
+    spectra instead.
 
     '''
 
-    pars_in = pars
+    if cdm_only:
+        biases = [{} for _ in ws]
+    else:
+        biases = _total_matter_bias(pars, ws)
 
     # make a copy of input parameters so we can set the things we need
     pars = pars.copy()
@@ -55,8 +58,8 @@ def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100,
     pars.SourceTerms.counts_evolve = False
 
     sources = []
-    for za, wa, _ in ws:
-        s = camb.sources.SplinedSourceWindow(z=za, W=wa)
+    for (za, wa, _), bias in zip(ws, biases):
+        s = camb.sources.SplinedSourceWindow(z=za, W=wa, **bias)
         sources.append(s)
     pars.SourceWindows = sources
 
@@ -67,16 +70,16 @@ def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100,
         if np.any(cls[f'W{i}xW{i}'] < 0):
             warnings.warn(f'negative auto-correlation in shell {i}; improve accuracy?')
 
-    cls = [cls[f'W{i}xW{j}'] for i in range(1, n+1) for j in range(i, 0, -1)]
-
-    if not cdm_only:
-        cls = _total_matter_cls(pars_in, lmax, ws, cls)
-
-    return cls
+    return [cls[f'W{i}xW{j}'] for i in range(1, n+1) for j in range(i, 0, -1)]
 
 
-def _total_matter_cls(pars, lmax, ws, cls):
-    '''Rescale cold dark matter shell spectra to total matter.'''
+# wavenumbers of the bias tables; CAMB sets the bias to zero outside the
+# table, so the range must cover every wavenumber that CAMB requests
+_BIAS_K = np.geomspace(1e-7, 1e4, 331)
+
+
+def _total_matter_bias(pars, ws):
+    '''Bias of total matter against cold dark matter for each window.'''
 
     nonlinear = pars.NonLinear != camb.model.NonLinear_none
     zmax = max(float(np.max(za)) for za, _, _ in ws)
@@ -86,28 +89,12 @@ def _total_matter_cls(pars, lmax, ws, cls):
         pars, var1='delta_tot', var2='delta_tot', **kw)
     pk_cdm = camb.get_matter_power_interpolator(
         pars, var1='delta_cdm', var2='delta_cdm', **kw)
-    bg = camb.get_background(pars)
 
-    # ratio at the effective redshift and Limber wavenumber of each shell
-    ell = np.arange(lmax+1, dtype=float)
-    rs = []
-    for _, _, zeff in ws:
-        zeff = float(zeff)
-        if zeff <= 1e-3:
-            rs.append(np.ones(lmax+1))
-            continue
-        chi = float(bg.comoving_radial_distance(zeff))
-        k = np.clip((ell + 0.5)/chi, 2e-4, 11.5)
-        rs.append(pk_tot.P(zeff, k, grid=False)/pk_cdm.P(zeff, k, grid=False))
+    # constant continuation outside the range of the interpolators
+    k = np.clip(_BIAS_K, 2e-4, 11.5)
 
-    n = len(rs)
-    out = []
-    idx = 0
-    for i in range(1, n+1):
-        for j in range(i, 0, -1):
-            cl = np.array(cls[idx], dtype=float)
-            m = min(len(cl), lmax+1)
-            cl[:m] *= np.sqrt(rs[i-1][:m]*rs[j-1][:m])
-            out.append(cl)
-            idx += 1
-    return out
+    biases = []
+    for za, _, _ in ws:
+        b = np.sqrt(pk_tot.P(za, k)/pk_cdm.P(za, k))
+        biases.append(dict(k_bias=_BIAS_K, bias_kz=np.ascontiguousarray(b.T)))
+    return biases
