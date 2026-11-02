@@ -17,8 +17,22 @@ def camb_tophat_weight(z):
     return np.clip(z/0.1, None, 1.)
 
 
-def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100):
-    '''Compute angular matter power spectra using CAMB.'''
+def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100,
+               cdm_only=False):
+    '''Compute angular matter power spectra using CAMB.
+
+    CAMB's number counts source traces cold dark matter.  By default, each
+    window is given the scale-dependent bias :math:`b(k, z) = \\sqrt{P_{\\rm
+    tot}(k, z)/P_{\\rm cdm}(k, z)}`, which turns the source into total matter
+    mode by mode.  Set ``cdm_only=True`` to compute the cold dark matter
+    spectra instead.
+
+    '''
+
+    if cdm_only:
+        biases = [{} for _ in ws]
+    else:
+        biases = _total_matter_bias(pars, ws)
 
     # make a copy of input parameters so we can set the things we need
     pars = pars.copy()
@@ -44,8 +58,8 @@ def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100):
     pars.SourceTerms.counts_evolve = False
 
     sources = []
-    for za, wa, _ in ws:
-        s = camb.sources.SplinedSourceWindow(z=za, W=wa)
+    for (za, wa, _), bias in zip(ws, biases):
+        s = camb.sources.SplinedSourceWindow(z=za, W=wa, **bias)
         sources.append(s)
     pars.SourceWindows = sources
 
@@ -54,6 +68,42 @@ def matter_cls(pars, lmax, ws, *, limber=False, limber_lmin=100):
 
     for i in range(1, n+1):
         if np.any(cls[f'W{i}xW{i}'] < 0):
-            warnings.warn('negative auto-correlation in shell {i}; improve accuracy?')
+            warnings.warn(f'negative auto-correlation in shell {i}; improve accuracy?')
 
     return [cls[f'W{i}xW{j}'] for i in range(1, n+1) for j in range(i, 0, -1)]
+
+
+# wavenumbers of the bias tables; CAMB sets the bias to zero outside the
+# table, so the range must cover every wavenumber that CAMB requests
+_BIAS_K = np.geomspace(1e-7, 1e4, 331)
+
+
+def _total_matter_bias(pars, ws):
+    '''Bias of total matter against cold dark matter for each window.
+
+    The bias is a ratio of linear spectra, from a single CAMB run.  CAMB
+    applies the same nonlinear correction to every variable, so it would
+    cancel in the ratio.
+
+    '''
+
+    zmax = max(float(np.max(za)) for za, _, _ in ws)
+    zs = np.exp(np.log(zmax + 1)*np.linspace(0, 1, 150)) - 1
+    pars = pars.copy()
+    pars.set_matter_power(redshifts=zs, kmax=12.0, silent=True)
+    pars.NonLinear = camb.model.NonLinear_none
+    results = camb.get_results(pars)
+    kw = dict(nonlinear=False, hubble_units=False, k_hunit=False)
+    pk_tot = results.get_matter_power_interpolator(
+        var1='delta_tot', var2='delta_tot', **kw)
+    pk_cdm = results.get_matter_power_interpolator(
+        var1='delta_cdm', var2='delta_cdm', **kw)
+
+    # constant continuation outside the range of the interpolators
+    k = np.clip(_BIAS_K, 2e-4, 11.5)
+
+    biases = []
+    for za, _, _ in ws:
+        b = np.sqrt(pk_tot.P(za, k)/pk_cdm.P(za, k))
+        biases.append(dict(k_bias=_BIAS_K, bias_kz=np.ascontiguousarray(b.T)))
+    return biases
