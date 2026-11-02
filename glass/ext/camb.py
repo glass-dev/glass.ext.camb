@@ -79,16 +79,25 @@ _BIAS_K = np.geomspace(1e-7, 1e4, 331)
 
 
 def _total_matter_bias(pars, ws):
-    '''Bias of total matter against cold dark matter for each window.'''
+    '''Bias of total matter against cold dark matter for each window.
 
-    nonlinear = pars.NonLinear != camb.model.NonLinear_none
+    The bias is a ratio of linear spectra, from a single CAMB run.  CAMB
+    applies the same nonlinear correction to every variable, so it would
+    cancel in the ratio.
+
+    '''
+
     zmax = max(float(np.max(za)) for za, _, _ in ws)
-    kw = dict(zmin=0.0, zmax=zmax, nz_step=150, kmax=12.0,
-              nonlinear=nonlinear, hubble_units=False, k_hunit=False)
-    pk_tot = camb.get_matter_power_interpolator(
-        pars, var1='delta_tot', var2='delta_tot', **kw)
-    pk_cdm = camb.get_matter_power_interpolator(
-        pars, var1='delta_cdm', var2='delta_cdm', **kw)
+    zs = np.exp(np.log(zmax + 1)*np.linspace(0, 1, 150)) - 1
+    pars = pars.copy()
+    pars.set_matter_power(redshifts=zs, kmax=12.0, silent=True)
+    pars.NonLinear = camb.model.NonLinear_none
+    results = camb.get_results(pars)
+    kw = dict(nonlinear=False, hubble_units=False, k_hunit=False)
+    pk_tot = results.get_matter_power_interpolator(
+        var1='delta_tot', var2='delta_tot', **kw)
+    pk_cdm = results.get_matter_power_interpolator(
+        var1='delta_cdm', var2='delta_cdm', **kw)
 
     # constant continuation outside the range of the interpolators
     k = np.clip(_BIAS_K, 2e-4, 11.5)
